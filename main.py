@@ -9,7 +9,7 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 from typing import TYPE_CHECKING
-from forms import CreatePostForm, RegisterForm
+from forms import CreatePostForm, RegisterForm, LoginForm
 from os import urandom
 
 app = Flask(__name__)
@@ -17,7 +17,13 @@ app.config['SECRET_KEY'] = f'{urandom(64)}'
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
-# TODO: Configure Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return Users.query.get(user_id)
 
 
 # CONNECT TO DB
@@ -61,13 +67,15 @@ with app.app_context():
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-        result = db.session.execute(db.select(Users).filter_by(email=form.data['email'])).scalar()
-        if result:
+        lowercase_email = str(form.data['email']).lower()
+        # Check if the user's email is already registered
+        user = db.session.execute(db.select(Users).filter_by(email=lowercase_email)).scalar()
+        if user:
             flash('It looks like that email address is already registered. '
                   'Please log in to your existing account instead.')
             return redirect(url_for('login'))
-        else:
 
+        else:
             hashed_and_salted_pw = generate_password_hash(password=form.data['password'],
                                                           method='pbkdf2',
                                                           salt_length=16)
@@ -79,20 +87,35 @@ def register():
             db.session.add(new_user)
             db.session.commit()
 
-            # login_user(new_user)
+            login_user(new_user)
             return redirect(url_for('get_all_posts'))
 
     return render_template("register.html", form=form)
 
 
-# TODO: Retrieve a user from the database based on their email. 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    return render_template("login.html")
+    form = LoginForm()
+    if form.validate_on_submit():
+        lowercase_email = str(form.data['email']).lower()
+        print(lowercase_email)
+        user = db.session.execute(db.select(Users).filter_by(email=lowercase_email)).scalar()
+        print(user.email)
+        if user:
+            if check_password_hash(password=form.data['password'], pwhash=user.password):
+                login_user(user)
+                return redirect(url_for('get_all_posts'))
+            else:
+                flash('Password incorrect, please try again.')
+        else:
+            flash('Email address not found, please try again.')
+
+    return render_template("login.html", form=form)
 
 
 @app.route('/logout')
 def logout():
+    logout_user()
     return redirect(url_for('get_all_posts'))
 
 
