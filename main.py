@@ -4,15 +4,16 @@ from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
-from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy, model
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
-# Import your forms from the forms.py
-from forms import CreatePostForm
+from typing import TYPE_CHECKING
+from forms import CreatePostForm, RegisterForm
+from os import urandom
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+app.config['SECRET_KEY'] = f'{urandom(64)}'
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
@@ -20,14 +21,14 @@ Bootstrap5(app)
 
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
 db = SQLAlchemy()
 db.init_app(app)
 
 
 # CONFIGURE TABLES
 class BlogPost(db.Model):
-    __tablename__ = "blog_posts"
+    __tablename__ = 'blog_posts'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
@@ -37,17 +38,51 @@ class BlogPost(db.Model):
     img_url = db.Column(db.String(250), nullable=False)
 
 
-# TODO: Create a User table for all your registered users. 
+class Users(UserMixin, db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(100), nullable=False)
+
+
+# Linting fix for SQLAlchemy
+if TYPE_CHECKING:
+    BaseModel = db.make_declarative_base(model.Model)
+else:
+    BaseModel = db.Model
 
 
 with app.app_context():
     db.create_all()
 
 
-# TODO: Use Werkzeug to hash the user's password when creating a new user.
-@app.route('/register')
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    return render_template("register.html")
+    form = RegisterForm()
+    if form.validate_on_submit():
+        result = db.session.execute(db.select(Users).filter_by(email=form.data['email'])).scalar()
+        if result:
+            flash('It looks like that email address is already registered. '
+                  'Please log in to your existing account instead.')
+            return redirect(url_for('login'))
+        else:
+
+            hashed_and_salted_pw = generate_password_hash(password=form.data['password'],
+                                                          method='pbkdf2',
+                                                          salt_length=16)
+            new_user = Users(
+                name=form.data['name'],
+                email=form.data['email'],
+                password=hashed_and_salted_pw
+            )
+            db.session.add(new_user)
+            db.session.commit()
+
+            # login_user(new_user)
+            return redirect(url_for('get_all_posts'))
+
+    return render_template("register.html", form=form)
 
 
 # TODO: Retrieve a user from the database based on their email. 
