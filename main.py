@@ -3,7 +3,7 @@ from flask import Flask, abort, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
-from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
 from flask_sqlalchemy import SQLAlchemy, model
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -63,6 +63,16 @@ with app.app_context():
     db.create_all()
 
 
+def admin_only(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if current_user.is_authenticated and current_user.id == 1:
+            return func(*args, **kwargs)
+        else:
+            abort(403)
+    return wrapper
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm()
@@ -98,9 +108,7 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         lowercase_email = str(form.data['email']).lower()
-        print(lowercase_email)
         user = db.session.execute(db.select(Users).filter_by(email=lowercase_email)).scalar()
-        print(user.email)
         if user:
             if check_password_hash(password=form.data['password'], pwhash=user.password):
                 login_user(user)
@@ -133,8 +141,8 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post)
 
 
-# TODO: Use a decorator so only an admin user can create a new post
 @app.route("/new-post", methods=["GET", "POST"])
+@admin_only
 def add_new_post():
     form = CreatePostForm()
     if form.validate_on_submit():
@@ -152,8 +160,8 @@ def add_new_post():
     return render_template("make-post.html", form=form)
 
 
-# TODO: Use a decorator so only an admin user can edit a post
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@admin_only
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
     edit_form = CreatePostForm(
@@ -174,8 +182,8 @@ def edit_post(post_id):
     return render_template("make-post.html", form=edit_form, is_edit=True)
 
 
-# TODO: Use a decorator so only an admin user can delete a post
 @app.route("/delete/<int:post_id>")
+@admin_only
 def delete_post(post_id):
     post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
