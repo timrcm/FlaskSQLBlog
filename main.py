@@ -49,6 +49,8 @@ class BlogPost(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     author = relationship('Users', back_populates='posts')
+    comments = relationship('Comments', back_populates='parent_post')
+
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
@@ -60,8 +62,11 @@ class Comments(db.Model):
     __tablename__ = 'comments'
     id = db.Column(db.Integer, primary_key=True)
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('blog_posts.id'))
+    parent_post = relationship('BlogPost', back_populates='comments')
     comment_author = relationship('Users', back_populates='comments')
-    comment = db.Column(db.Text, nullable=False)
+
+    text = db.Column(db.Text, nullable=False)
 
 
 with app.app_context():
