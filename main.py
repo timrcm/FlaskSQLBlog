@@ -33,23 +33,28 @@ db.init_app(app)
 
 
 # CONFIGURE TABLES
-class BlogPost(db.Model):
-    __tablename__ = 'blog_posts'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(250), unique=True, nullable=False)
-    subtitle = db.Column(db.String(250), nullable=False)
-    date = db.Column(db.String(250), nullable=False)
-    body = db.Column(db.Text, nullable=False)
-    author = db.Column(db.String(250), nullable=False)
-    img_url = db.Column(db.String(250), nullable=False)
-
-
 class Users(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(100), nullable=False)
+    # Acts like a list of BlogPost objects attached to each user
+    # Author == BlogPost.Author property
+    posts = relationship('BlogPost', back_populates="author")
+
+
+class BlogPost(db.Model):
+    __tablename__ = 'blog_posts'
+    id = db.Column(db.Integer, primary_key=True)
+    # Create the foreign key
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    author = relationship('Users', back_populates='posts')
+    title = db.Column(db.String(250), unique=True, nullable=False)
+    subtitle = db.Column(db.String(250), nullable=False)
+    date = db.Column(db.String(250), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    img_url = db.Column(db.String(250), nullable=False)
 
 
 # Linting fix for SQLAlchemy
@@ -57,7 +62,6 @@ if TYPE_CHECKING:
     BaseModel = db.make_declarative_base(model.Model)
 else:
     BaseModel = db.Model
-
 
 with app.app_context():
     db.create_all()
@@ -70,6 +74,7 @@ def admin_only(func):
             return func(*args, **kwargs)
         else:
             abort(403)
+
     return wrapper
 
 
@@ -129,9 +134,9 @@ def logout():
 
 @app.route('/')
 def get_all_posts():
-    result = db.session.execute(db.select(BlogPost))
-    posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts)
+    posts = db.session.execute(db.select(BlogPost)).scalars().all()
+    users = db.session.execute(db.select(Users)).scalars().all()
+    return render_template("index.html", all_posts=posts, users=users)
 
 
 # TODO: Allow logged-in users to comment on posts
