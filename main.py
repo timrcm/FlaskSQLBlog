@@ -8,8 +8,7 @@ from flask_sqlalchemy import SQLAlchemy, model
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
-from typing import TYPE_CHECKING
-from forms import CreatePostForm, RegisterForm, LoginForm
+from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
 from os import urandom
 
 app = Flask(__name__)
@@ -39,15 +38,15 @@ class Users(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(100), nullable=False)
-    # Acts like a list of BlogPost objects attached to each user
+    # Acts like a list of BlogPost or Comments objects attached to each user
     # Author == BlogPost.Author property
-    posts = relationship('BlogPost', back_populates="author")
+    posts = relationship('BlogPost', back_populates='author')
+    comments = relationship('Comments', back_populates='comment_author')
 
 
 class BlogPost(db.Model):
     __tablename__ = 'blog_posts'
     id = db.Column(db.Integer, primary_key=True)
-    # Create the foreign key
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     author = relationship('Users', back_populates='posts')
     title = db.Column(db.String(250), unique=True, nullable=False)
@@ -57,11 +56,13 @@ class BlogPost(db.Model):
     img_url = db.Column(db.String(250), nullable=False)
 
 
-# Linting fix for SQLAlchemy
-if TYPE_CHECKING:
-    BaseModel = db.make_declarative_base(model.Model)
-else:
-    BaseModel = db.Model
+class Comments(db.Model):
+    __tablename__ = 'comments'
+    id = db.Column(db.Integer, primary_key=True)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    comment_author = relationship('Users', back_populates='comments')
+    comment = db.Column(db.Text, nullable=False)
+
 
 with app.app_context():
     db.create_all()
@@ -139,11 +140,11 @@ def get_all_posts():
     return render_template("index.html", all_posts=posts, users=users)
 
 
-# TODO: Allow logged-in users to comment on posts
 @app.route("/post/<int:post_id>")
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
-    return render_template("post.html", post=requested_post)
+    form = CommentForm()
+    return render_template("post.html", post=requested_post, form=form)
 
 
 @app.route("/new-post", methods=["GET", "POST"])
