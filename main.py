@@ -3,8 +3,8 @@ from flask import Flask, abort, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
-from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
-from flask_sqlalchemy import SQLAlchemy, model
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
@@ -29,6 +29,15 @@ def load_user(user_id):
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
 db = SQLAlchemy()
 db.init_app(app)
+
+gravatar = Gravatar(app,
+                    size=100,
+                    rating='g',
+                    default='retro',
+                    force_default=False,
+                    force_lower=False,
+                    use_ssl=False,
+                    base_url=None)
 
 
 # CONFIGURE TABLES
@@ -145,10 +154,22 @@ def get_all_posts():
     return render_template("index.html", all_posts=posts, users=users)
 
 
-@app.route("/post/<int:post_id>")
+@app.route("/post/<int:post_id>", methods=['GET', 'POST'])
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
     form = CommentForm()
+    if form.validate_on_submit():
+        if not current_user.is_authenticated:
+            flash('You must be logged in to submit comments.')
+            return redirect(url_for('login'))
+        else:
+            new_comment = Comments(
+                text=form.data['comment'],
+                comment_author=current_user,
+                parent_post=requested_post
+            )
+            db.session.add(new_comment)
+            db.session.commit()
     return render_template("post.html", post=requested_post, form=form)
 
 
