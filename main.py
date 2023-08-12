@@ -9,7 +9,7 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
-from os import urandom
+from os import urandom, getenv
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = f'{urandom(64)}'
@@ -26,7 +26,7 @@ def load_user(user_id):
 
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = f'{getenv("SQLALCHEMY_DATABASE_URI")}'
 db = SQLAlchemy()
 db.init_app(app)
 
